@@ -1,0 +1,80 @@
+version: 2.0
+
+jobs:
+  build-master:
+    docker:
+      - image: circleci/openjdk:8-jdk
+    steps:
+      - checkout
+      - run:
+          name: Build project
+          command: ./gradlew build
+      - setup_remote_docker
+      - run:
+          name: Build Docker image
+          command: docker build -t $AWS_ECR_NAME:$CIRCLE_SHA1 .
+      - run:
+          name: Setup AWS CLI
+          command: sh .circleci/aws/setup-cli.sh
+      - run:
+          name: Push to ECR
+          command: |
+            docker tag $AWS_ECR_NAME:$CIRCLE_SHA1 $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$AWS_ECR_NAME:$CIRCLE_SHA1
+            docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$AWS_ECR_NAME:$CIRCLE_SHA1
+  deploy-to-staging:
+    docker:
+      - image: circleci/openjdk:8-jdk
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Setup AWS CLI
+          command: sh .circleci/aws/setup-cli.sh
+      - run:
+          name: Deploy to staging
+          command: sh .circleci/aws/deploy-to-staging.sh
+  deploy-to-prod:
+    docker:
+      - image: circleci/openjdk:8-jdk
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Setup AWS CLI
+          command: sh .circleci/aws/setup-cli.sh
+      - run:
+          name: Deploy to prod
+          command: sh .circleci/aws/deploy-to-prod.sh
+  build-feature:
+    docker:
+      - image: circleci/openjdk:8-jdk
+    steps:
+      - checkout
+      - run:
+          name: Build project
+          command: ./gradlew build
+
+workflows:
+  version: 2
+  master:
+    jobs:
+      - build-master:
+          filters:
+            branches:
+              only: master
+      - deploy-to-staging:
+          requires:
+            - build-master
+      - hold:
+          type: approval
+          requires:
+            - deploy-to-staging
+      - deploy-to-prod:
+          requires:
+            - hold
+  feature:
+    jobs:
+      - build-feature:
+          filters:
+            branches:
+              ignore: master
