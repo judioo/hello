@@ -1,5 +1,5 @@
 #!/bin/sh
-sudo apt-get install awscli=1.11.13
+#sudo apt-get install awscli
 aws --version
 aws configure set default.region $AWS_REGION
 aws configure set default.output json
